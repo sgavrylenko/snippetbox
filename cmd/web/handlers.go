@@ -11,6 +11,13 @@ import (
 	"unicode/utf8"
 )
 
+type snippetCreateForm struct {
+	Title       string
+	Content     string
+	Expires     int
+	FieldErrors map[string]string
+}
+
 func (app *application) home(w http.ResponseWriter, r *http.Request) {
 	data := app.newTemplateData(r)
 
@@ -50,6 +57,11 @@ func (app *application) snippetView(w http.ResponseWriter, r *http.Request) {
 
 func (app *application) snippetCreate(w http.ResponseWriter, r *http.Request) {
 	data := app.newTemplateData(r)
+
+	data.Form = snippetCreateForm{
+		Expires: 365,
+	}
+
 	app.render(w, http.StatusOK, "create.tmpl", data)
 }
 
@@ -69,28 +81,35 @@ func (app *application) snippetCreatePost(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	fieldErrors := make(map[string]string)
+	form := snippetCreateForm{
+		Title:       title,
+		Content:     content,
+		Expires:     expires,
+		FieldErrors: map[string]string{},
+	}
 
 	if strings.TrimSpace(title) == "" {
-		fieldErrors["title"] = "This field can't be blank"
+		form.FieldErrors["title"] = "This field can't be blank"
 	} else if utf8.RuneCountInString(title) > 100 {
-		fieldErrors["title"] = "This field can't be more than 100 characters long"
+		form.FieldErrors["title"] = "This field can't be more than 100 characters long"
 	}
 
 	if strings.TrimSpace(content) == "" {
-		fieldErrors["content"] = "This field can't be blank"
+		form.FieldErrors["content"] = "This field can't be blank"
 	}
 
 	if expires != 1 && expires != 7 && expires != 365 {
-		fieldErrors["expires"] = "This field must be equal 1,7 or 365"
+		form.FieldErrors["expires"] = "This field must be equal 1,7 or 365"
 	}
 
-	if len(fieldErrors) > 0 {
-		_, _ = fmt.Fprint(w, fieldErrors)
+	if len(form.FieldErrors) > 0 {
+		data := app.newTemplateData(r)
+		data.Form = form
+		app.render(w, http.StatusUnprocessableEntity, "create.tmpl", data)
 		return
 	}
 
-	id, err := app.snippets.Insert(title, content, expires)
+	id, err := app.snippets.Insert(form.Title, form.Content, form.Expires)
 	if err != nil {
 		app.serverError(w, err)
 		return
